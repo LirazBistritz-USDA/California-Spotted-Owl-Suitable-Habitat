@@ -1,0 +1,162 @@
+---
+title: "Code for mapping CSO habitat suitability"
+author: "Liraz Bistritz"
+date: "2025-04-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(terra)
+library(raster)
+library(sf)
+```
+
+###California Spotted Owl (CSO) habitat:###
+
+##In order for the code to work, the following needs to be true:
+#The size raster's values should be:
+size 1's value is 10
+size 2's values is 20
+size 3's values is 30
+size 4's values is 40
+size 5's values is 50
+
+#In the canopy cover, the values should be 1-4, where:
+D is 4
+M	is 3
+X	is 0
+P	is 2
+S is 1
+
+#The veg types need to be numerical too, in this current version it was as follows:
+DFR is 100
+EPN is 200
+JPN	is 300
+LPN	is 400
+MHC	is 500
+MHW	is 600
+MRI	is 700
+PPN	is 800
+RFR	is 900
+SMC	is 1000
+WFR is 1100
+
+#make sure these values align with the values in the base layer you use, i.e. that DFR is coded as 100 etc.
+#then the 3 rasters above need to be summed, so that for example the value 154 in this summed raster means: veg type 100, size 50, canopy cover 4.
+#once you have this summed base layer, you can run the code:
+
+```{r}
+dir <- "~"  #set the directory where the boundary, species' ranges and base layer are located
+output_dir <- "~" #set the directory to which your outputs will be saved
+
+#the boundary:
+bound <- rast(paste0(dir, "/ACCEL_boundary_TealeAlbers.tif")) #the landscape boundary raster
+
+#the base layer (the summed raster):
+base_layer <- rast(paste0(dir, "/base_layer.tif")) %>%
+  terra::project(bound, method="near") %>%
+  terra::crop(bound)
+plot(base_layer)
+
+#CSO range, to clip the habitat layers by it (can be downloaded from https://map.dfg.ca.gov/metadata/ds0897.html)
+cso_range <- rast(paste0(dir, "/b270.tif")) %>%
+  terra::project(bound, method="near") %>%
+  terra::crop(bound)
+```
+
+```{r}
+#creating a binary layer for habitat that is highly suitable for nesting:
+cso_habitat_1 <- c(154, 254, 354, 454, 554, 654, 754, 854, 954, 1054, 1154) #these are: "DFR5D", "EPN5D", "JPN5D", "LPN5D", "MHC5D", "MHW5D", "MRI5D", "PPN5D", "RFR5D", "SMC5D", "WFR5D
+ones <- c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+n_cso_unique_hab_ID <- data.frame(cso_habitat_1, ones) #creating a data frame
+n_cso_unique_hab_ID
+
+n_cso_ras <- classify(base_layer, n_cso_unique_hab_ID, others=0) #reclassifying the suitable values into 1, to create the binary habitat layer
+plot(n_cso_ras)
+n_cso_ras <- ifel(cso_range == 1, n_cso_ras, 0)  #keeping only suitable habitat within the CSO range
+plot(n_cso_ras)
+n_cso_ras <- mask(n_cso_ras, bound)
+plot(n_cso_ras)
+
+writeRaster(n_cso_ras, paste0(output_dir, "/FVEG_CSO_suitable_habitat_1.tif"), overwrite=T, datatype='INT1S') #saving the output
+
+
+##################
+#removing outputs from R environment before running the next lines:
+rm(n_cso_unique_hab_ID, n_cso_unique_hab_ID2, cso_habitat_1, cso_habitat_2, cso_habitat_4, cso_habitat_5, cso_filt_final_5, f_cso_unique_hab_ID, f_cso_unique_hab_ID2)
+
+#creating a binary layer for habitat that is moderately suitable for nesting:
+cso_habitat_2 <- c(153, 253, 353, 453, 553, 653, 753, 853, 953, 1053, 1153) #these are: "DFR5M", "EPN5M", "JPN5M", "LPN5M", "MHC5M", "MHW5M", "MRI5M", "PPN5M", "RFR5M", "SMC5M", "WFR5M"
+ones <- c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+n_cso_unique_hab_ID2 <- data.frame(cso_habitat_2, ones) #creating a data frame
+
+n_cso_ras2 <- classify(base_layer, n_cso_unique_hab_ID2, others=0) #reclassifying the suitable values into 1, to create the binary habitat layer
+
+n_cso_ras2 <- ifel(cso_range == 1, n_cso_ras2, 0)  #keeping only suitable habitat within the CSO range
+
+n_cso_ras2 <- mask(n_cso_ras2, bound)
+plot(n_cso_ras2)
+writeRaster(n_cso_ras2, paste0(output_dir, "/FVEG_CSO_suitable_habitat_2.tif"), overwrite=T, datatype='INT1S') #saving the output
+
+
+##################
+#removing outputs from R environment before running the next lines:
+rm(n_cso_unique_hab_ID, n_cso_unique_hab_ID2, cso_habitat_1, cso_habitat_2, cso_habitat_4, cso_habitat_5, cso_filt_final_5, f_cso_unique_hab_ID, f_cso_unique_hab_ID2)
+
+#creating a binary layer for habitat that is highly suitable for foraging:
+cso_habitat_4 <- c(144, 544, 644, 744, 844, 944, 1044, 1144) #"DFR4D", "MHC4D", "MHW4D", "MRI4D", "PPN4D", "RFR4D", "SMC4D", "WFR4D"
+ones <- c(1, 1, 1, 1, 1, 1, 1, 1)
+f_cso_unique_hab_ID <- data.frame(cso_habitat_4, ones) #creating a data frame
+
+f_cso_ras <- classify(base_layer, f_cso_unique_hab_ID, others=0) #reclassifying the suitable values into 1, to create the binary habitat layer
+
+f_cso_ras <- ifel(cso_range == 1, f_cso_ras, 0) #keeping only suitable habitat within the CSO range
+plot(f_cso_ras)
+f_cso_ras <- mask(f_cso_ras, bound)
+plot(bound)
+
+writeRaster(f_cso_ras, paste0(output_dir, "/FVEG_CSO_suitable_habitat_4.tif"), overwrite=T, datatype='INT1S') #saving the output
+
+
+##################
+#removing outputs from R environment before running the next lines:
+rm(n_cso_unique_hab_ID, n_cso_unique_hab_ID2, cso_habitat_1, cso_habitat_2, cso_habitat_4, cso_habitat_5, cso_filt_final_5, f_cso_unique_hab_ID, f_cso_unique_hab_ID2)
+
+#creating a binary layer for habitat that is moderately suitable for foraging:
+cso_habitat_5 <- c(143, 543, 643, 743, 843, 943, 1043, 1143) #these are: "DFR4M", "MHC4M", "MHW4M", "MRI4M", "PPN4M", "RFR4M", "SMC4M", "WFR4M"
+ones <- c(1, 1, 1, 1, 1, 1, 1, 1)
+f_cso_unique_hab_ID2 <- data.frame(cso_habitat_5, ones) #creating a data frame
+
+f_cso_ras2 <- classify(base_layer, f_cso_unique_hab_ID2, others=0) #reclassifying the suitable values into 1, to create the binary habitat layer
+
+f_cso_ras2 <- ifel(cso_range == 1, f_cso_ras2, 0) #keeping only suitable habitat within the CSO range
+plot(f_cso_ras2)
+f_cso_ras2 <- mask(f_cso_ras2, bound)
+plot(bound)
+
+writeRaster(f_cso_ras2, paste0(output_dir, "/FVEG_CSO_suitable_habitat_5.tif"), overwrite=T, datatype='INT1S') #saving the output
+
+```
+
+```{r}
+#bringing the four habitat layers together:
+
+habitat <- n_cso_ras + n_cso_ras2 + f_cso_ras + f_cso_ras2 #sum layer values
+habitat_final <- ifel(habitat > 0, 1, 0) #if the summed layer is greater than 0, classify the pixel as 1, otherwise, 0.
+
+plot(n_cso_ras)
+plot(n_cso_ras2)
+plot(f_cso_ras)
+plot(f_cso_ras2)
+plot(habitat_final)
+
+writeRaster(habitat_final, paste0(output_dir, "/FVEG_CSO_suitable_habitat_1245.tif"), overwrite=T, datatype='INT1S') #saving the output
+```
